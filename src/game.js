@@ -1,11 +1,10 @@
 /* ============================================================
-   La Mazmorra del Saber — F2: personaje + movimiento + colisiones
+   La Mazmorra del Saber — F3: cámara que sigue al personaje
    ------------------------------------------------------------
-   - Carga el spritesheet del personaje (character_1.png, 16x16)
-   - Crea un sprite animado en el centro de la sala
-   - Movimiento fluido con WASD/flechas
-   - 2 frames de animación (caminar/idle) — loop mientras se mueve
-   - Colisiones con las paredes: el personaje NO puede atravesarlas
+   - Mapa más grande (30x20) para tener espacio que la cámara recorra
+   - Cámara sigue al jugador con suavizado (setLerp)
+   - Bordes del mundo definidos: la cámara no sale del mapa
+   - Jugador no puede salir del mundo (physics bounds)
    ============================================================ */
 
 const config = {
@@ -35,31 +34,45 @@ const config = {
 
 const TILE_SIZE = 16;
 const SCALE     = 3;
-const MAP_COLS  = 12;
-const MAP_ROWS  = 10;
-const SPEED     = 120;   // pixeles por segundo del personaje
+const MAP_COLS  = 30;
+const MAP_ROWS  = 20;
+const SPEED     = 120;
 
+// Layout del mapa 30x20.
+//   # = pared
+//   . = suelo
+//   D = puerta (F5 la hará interactiva, F3 sólo la dibuja)
 const MAPA = [
-  '############',
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#..........D',
-  '############'
+  '##############################',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................#',
+  '#............................D',
+  '##############################'
 ];
 
 function preload() {
-  console.log('[F2] preload: cargando tileset + personaje');
+  console.log('[F3] preload');
   this.load.image('tileset', 'assets/tilesets/tileset.png');
   this.load.image('personaje', 'assets/characters/character_1.png');
 }
 
 function create() {
-  console.log('[F2] create: armando mundo, jugador, colisiones');
+  console.log('[F3] create: mundo grande + cámara que sigue al jugador');
 
   // ---------- Mundo: tileset + cortar ----------
   this.textures.addSpriteSheet('tiles', this.textures.get('tileset').getSourceImage(), {
@@ -69,24 +82,19 @@ function create() {
 
   const mundoAncho = MAP_COLS * TILE_SIZE * SCALE;
   const mundoAlto  = MAP_ROWS * TILE_SIZE * SCALE;
-  const offsetX = (this.cameras.main.width  - mundoAncho) / 2;
-  const offsetY = (this.cameras.main.height - mundoAlto)  / 2;
 
-  // Construimos el mapa.
-  // Paredes y suelo: registros de imagen para usarlos como sprites sueltos
-  // que también sirven de hitbox para el jugador.
-  this.paredes = [];   // referencia para el collider
+  // Construir el mapa. Las paredes son staticImage para colisiones.
+  this.paredes = [];
   for (let row = 0; row < MAP_ROWS; row++) {
     for (let col = 0; col < MAP_COLS; col++) {
       const cell = MAPA[row][col];
-      const x = offsetX + col * TILE_SIZE * SCALE;
-      const y = offsetY + row * TILE_SIZE * SCALE;
+      const x = col * TILE_SIZE * SCALE;
+      const y = row * TILE_SIZE * SCALE;
 
       if (cell === '#') {
         const pared = this.physics.add.staticImage(x, y, 'tiles', getFrameIndex(1, 1))
           .setOrigin(0, 0)
           .setScale(SCALE);
-        // Forzar el body a tener el tamaño del sprite escalado
         pared.body.setSize(16, 16);
         pared.body.updateFromGameObject();
         this.paredes.push(pared);
@@ -99,24 +107,19 @@ function create() {
   }
 
   // ---------- Spritesheet del personaje ----------
-  // character_1.png es 112x64 = 7 columnas x 4 filas de frames 16x16.
-  // Frames 0 y 1 = personaje azul, posición "front" (mirando al frente/abajo).
-  // Frames 2 y 3 = mismo personaje con animación de caminata (cambia ligeramente).
   this.textures.addSpriteSheet('char', this.textures.get('personaje').getSourceImage(), {
     frameWidth: 16,
     frameHeight: 16
   });
 
-  // Posición inicial: centro de la sala
-  const startX = offsetX + 5 * TILE_SIZE * SCALE + TILE_SIZE * SCALE / 2;
-  const startY = offsetY + 4 * TILE_SIZE * SCALE + TILE_SIZE * SCALE / 2;
+  // Posición inicial: centro del mapa
+  const startX = (MAP_COLS / 2) * TILE_SIZE * SCALE;
+  const startY = (MAP_ROWS / 2) * TILE_SIZE * SCALE;
 
   this.jugador = this.physics.add.sprite(startX, startY, 'char', 0)
     .setScale(SCALE)
-    .setCollideWorldBounds(false);   // nosotros controlamos los límites
+    .setCollideWorldBounds(false);
 
-  // Animación idle (mismo frame 0 estático — no es loop)
-  // Animación walk: alterna frames 0 y 1 a 6 fps
   this.anims.create({
     key: 'idle',
     frames: [{ key: 'char', frame: 0 }],
@@ -133,9 +136,19 @@ function create() {
   });
   this.jugador.play('idle');
 
-  // ---------- Colisiones ----------
-  // Phaser Arcade Physics: el jugador choca con cada pared.
   this.physics.add.collider(this.jugador, this.paredes);
+
+  // ---------- Bordes del mundo (F3) ----------
+  // La cámara no puede mostrar áreas fuera del mapa
+  this.cameras.main.setBounds(0, 0, mundoAncho, mundoAlto);
+  // El mundo físico tampoco (el jugador rebota en los límites)
+  this.physics.world.setBounds(0, 0, mundoAncho, mundoAlto);
+
+  // ---------- Cámara que sigue al jugador (F3) ----------
+  this.cameras.main.startFollow(this.jugador, true);
+  // setLerp(x, y): factor de suavizado. 0.1 = sigue con un poco de delay (suave).
+  this.cameras.main.setLerp(0.1, 0.1);
+  // Si querés que la cámara vaya más "pegada", subí este valor a 0.5 o 1.
 
   // ---------- Input ----------
   this.cursors = this.input.keyboard.createCursorKeys();
@@ -146,40 +159,38 @@ function create() {
     D: Phaser.Input.Keyboard.KeyCodes.D
   });
 
-  // ---------- UI: título + hint ----------
-  this.add.text(
-    this.cameras.main.width / 2,
-    30,
-    'Sala 1: Introducción',
-    {
-      fontFamily: 'Trebuchet MS',
-      fontSize: '24px',
-      color: '#ffd966',
-      align: 'center',
-      stroke: '#000000',
-      strokeThickness: 3
-    }
-  ).setOrigin(0.5);
+  // ---------- UI: título y hint ----------
+  // El título queda anclado a la cámara para que se vea siempre
+  this.add.text(mundoAncho / 2, 30, 'Sala 1: Introducción', {
+    fontFamily: 'Trebuchet MS',
+    fontSize: '24px',
+    color: '#ffd966',
+    align: 'center',
+    stroke: '#000000',
+    strokeThickness: 3
+  }).setOrigin(0.5).setScrollFactor(0);  // scrollFactor 0 = no se mueve con la cámara
 
-  this.hint = this.add.text(
-    this.cameras.main.width / 2,
-    this.cameras.main.height - 20,
-    'F2 — Mover con WASD o flechas',
-    {
-      fontFamily: 'Trebuchet MS',
-      fontSize: '14px',
-      color: '#888888',
-      align: 'center'
-    }
-  ).setOrigin(0.5);
+  this.add.text(mundoAncho / 2, mundoAlto - 20, 'F3 — Cámara que sigue al jugador. WASD/flechas.', {
+    fontFamily: 'Trebuchet MS',
+    fontSize: '14px',
+    color: '#888888',
+    align: 'center'
+  }).setOrigin(0.5).setScrollFactor(0);
 
-  console.log(`[F2] mundo: ${mundoAncho}x${mundoAlto}, jugador en (${startX}, ${startY})`);
+  // Indicador de la posición del jugador (debug, también fijo a la cámara)
+  this.posText = this.add.text(10, 10, '', {
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: '#00ff00',
+    backgroundColor: '#000000',
+    padding: { x: 6, y: 4 }
+  }).setScrollFactor(0);
+
+  console.log(`[F3] mundo: ${mundoAncho}x${mundoAlto} px (${MAP_COLS}x${MAP_ROWS} tiles), jugador en (${startX}, ${startY})`);
 }
 
 function update(time, delta) {
-  // Resetear velocidad cada frame
   this.jugador.setVelocity(0);
-
   let moviendose = false;
 
   if (this.cursors.left.isDown || this.teclas.A.isDown) {
@@ -189,7 +200,6 @@ function update(time, delta) {
     this.jugador.setVelocityX(SPEED);
     moviendose = true;
   }
-
   if (this.cursors.up.isDown || this.teclas.W.isDown) {
     this.jugador.setVelocityY(-SPEED);
     moviendose = true;
@@ -198,19 +208,20 @@ function update(time, delta) {
     moviendose = true;
   }
 
-  // Normalizar velocidad en diagonales: si se mueve en X e Y, la magnitud
-  // sería sqrt(2) * SPEED. Para mantener la misma velocidad en todas
-  // las direcciones, ajustamos.
   if (this.jugador.body.velocity.x !== 0 && this.jugador.body.velocity.y !== 0) {
     this.jugador.body.velocity.normalize().scale(SPEED);
   }
 
-  // Cambiar animación según si se está moviendo o no
   if (moviendose && this.jugador.anims.currentAnim.key !== 'walk') {
     this.jugador.play('walk', true);
   } else if (!moviendose && this.jugador.anims.currentAnim.key !== 'idle') {
     this.jugador.play('idle', true);
   }
+
+  // Actualizar texto de debug con la posición del jugador
+  this.posText.setText(
+    `x: ${Math.round(this.jugador.x)}  y: ${Math.round(this.jugador.y)}`
+  );
 }
 
 function getFrameIndex(row, col) {
