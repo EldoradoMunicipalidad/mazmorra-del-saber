@@ -1,0 +1,76 @@
+{
+  "tema": "Matemáticas",
+  "descripcion": "Preguntas de aritmética básica (suma, resta, multiplicación, división) para 4°-6° grado.",
+  "preguntas": [
+    {
+      "id": "mat-001",
+      "pregunta": "¿Cuánto es 7 + 8?",
+      "opciones": ["13", "14", "15", "16"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "mat-002",
+      "pregunta": "¿Cuánto es 12 × 4?",
+      "opciones": ["36", "44", "48", "52"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "mat-003",
+      "pregunta": "¿Cuánto es 144 ÷ 12?",
+      "opciones": ["10", "11", "12", "14"],
+      "respuesta": 2,
+      "dificultad": "media"
+    },
+    {
+      "id": "mat-004",
+      "pregunta": "¿Cuánto es 25 - 17?",
+      "opciones": ["6", "7", "8", "9"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "mat-005",
+      "pregunta": "¿Cuánto es 9 × 9?",
+      "opciones": ["72", "81", "90", "99"],
+      "respuesta": 1,
+      "dificultad": "facil"
+    },
+    {
+      "id": "mat-006",
+      "pregunta": "¿Cuánto es 100 ÷ 5?",
+      "opciones": ["15", "20", "25", "30"],
+      "respuesta": 1,
+      "dificultad": "media"
+    },
+    {
+      "id": "mat-007",
+      "pregunta": "Si tengo 3 docenas de huevos, ¿cuántos huevos tengo?",
+      "opciones": ["24", "30", "36", "42"],
+      "respuesta": 2,
+      "dificultad": "media"
+    },
+    {
+      "id": "mat-008",
+      "pregunta": "¿Cuál es el doble de 47?",
+      "opciones": ["84", "94", "104", "114"],
+      "respuesta": 1,
+      "dificultad": "media"
+    },
+    {
+      "id": "mat-009",
+      "pregunta": "¿Cuánto es 15% de 200?",
+      "opciones": ["20", "25", "30", "35"],
+      "respuesta": 2,
+      "dificultad": "dificil"
+    },
+    {
+      "id": "mat-010",
+      "pregunta": "Si un triángulo tiene un ángulo de 90° y otro de 45°, ¿cuánto mide el tercero?",
+      "opciones": ["30°", "45°", "60°", "90°"],
+      "respuesta": 1,
+      "dificultad": "dificil"
+    }
+  ]
+}
