@@ -13,7 +13,7 @@ Juego educativo de dungeon-crawler 2D donde el personaje debe resolver preguntas
 | Fase | Estado | Descripción |
 |------|--------|-------------|
 | F0 | ✅ | Bootstrap de Phaser + ventana con fondo y título |
-| F1 | ⏳ | Tileset cargado + primera habitación renderizada |
+| F1 | ✅ | Tileset cargado + primera habitación renderizada (12x10) |
 | F2 | ⏳ | Movimiento del personaje + colisiones |
 | F3 | ⏳ | Cámara que sigue al personaje |
 | F4 | ⏳ | Banco de preguntas + priest interactivo |
