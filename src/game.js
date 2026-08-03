@@ -1,11 +1,11 @@
 /* ============================================================
-   La Mazmorra del Saber — F1: tileset + primera habitación
+   La Mazmorra del Saber — F2: personaje + movimiento + colisiones
    ------------------------------------------------------------
-   - Carga el tileset
-   - Lo corta en tiles de 16x16
-   - Construye una habitación 12x10 tiles
-     (4 paredes + 8x8 suelo + puerta de salida)
-   - Renderiza el mapa estático
+   - Carga el spritesheet del personaje (character_1.png, 16x16)
+   - Crea un sprite animado en el centro de la sala
+   - Movimiento fluido con WASD/flechas
+   - 2 frames de animación (caminar/idle) — loop mientras se mueve
+   - Colisiones con las paredes: el personaje NO puede atravesarlas
    ============================================================ */
 
 const config = {
@@ -19,21 +19,26 @@ const config = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 0 },
+      debug: false
+    }
+  },
   scene: {
     preload: preload,
-    create: create
+    create: create,
+    update: update
   }
 };
 
 const TILE_SIZE = 16;
-const SCALE = 3;        // cada tile se ve 3x (16 -> 48 px)
-const MAP_COLS = 12;
-const MAP_ROWS = 10;
+const SCALE     = 3;
+const MAP_COLS  = 12;
+const MAP_ROWS  = 10;
+const SPEED     = 120;   // pixeles por segundo del personaje
 
-// Layout del mapa:
-//   # = pared
-//   . = suelo
-//   D = puerta (la marcamos como suelo, en F5 será interactiva)
 const MAPA = [
   '############',
   '#..........#',
@@ -48,35 +53,29 @@ const MAPA = [
 ];
 
 function preload() {
-  console.log('[F1] preload: cargando tileset');
+  console.log('[F2] preload: cargando tileset + personaje');
   this.load.image('tileset', 'assets/tilesets/tileset.png');
+  this.load.image('personaje', 'assets/characters/character_1.png');
 }
 
 function create() {
-  console.log('[F1] create: construyendo habitación');
+  console.log('[F2] create: armando mundo, jugador, colisiones');
 
-  // 1) Cortar el tileset en tiles individuales
-  //    El tileset es 10x10 tiles de 16x16 cada uno
-  //    Phaser puede cortar automáticamente con la config frames
+  // ---------- Mundo: tileset + cortar ----------
   this.textures.addSpriteSheet('tiles', this.textures.get('tileset').getSourceImage(), {
     frameWidth: TILE_SIZE,
     frameHeight: TILE_SIZE
   });
 
-  // 2) Generar la textura de pared y suelo a partir de los frames correctos
-  //    Vamos a usar el frame (1,1) para pared y (2,2) para suelo
-  const paredFrame = this.add.image(0, 0, 'tiles', getFrameIndex(1, 1))
-    .setOrigin(0, 0).setVisible(false);
-  const sueloFrame = this.add.image(0, 0, 'tiles', getFrameIndex(2, 2))
-    .setOrigin(0, 0).setVisible(false);
+  const mundoAncho = MAP_COLS * TILE_SIZE * SCALE;
+  const mundoAlto  = MAP_ROWS * TILE_SIZE * SCALE;
+  const offsetX = (this.cameras.main.width  - mundoAncho) / 2;
+  const offsetY = (this.cameras.main.height - mundoAlto)  / 2;
 
-  // 3) Construir el mapa iterando la matriz
-  //    Cada tile se coloca en (col*TILE_SIZE*SCALE, row*TILE_SIZE*SCALE)
-  const mundoAncho  = MAP_COLS * TILE_SIZE * SCALE;
-  const mundoAlto   = MAP_ROWS * TILE_SIZE * SCALE;
-  const offsetX = (this.cameras.main.width  - mundoAncho)  / 2;
-  const offsetY = (this.cameras.main.height - mundoAlto)   / 2;
-
+  // Construimos el mapa.
+  // Paredes y suelo: registros de imagen para usarlos como sprites sueltos
+  // que también sirven de hitbox para el jugador.
+  this.paredes = [];   // referencia para el collider
   for (let row = 0; row < MAP_ROWS; row++) {
     for (let col = 0; col < MAP_COLS; col++) {
       const cell = MAPA[row][col];
@@ -84,9 +83,13 @@ function create() {
       const y = offsetY + row * TILE_SIZE * SCALE;
 
       if (cell === '#') {
-        this.add.image(x, y, 'tiles', getFrameIndex(1, 1))
+        const pared = this.physics.add.staticImage(x, y, 'tiles', getFrameIndex(1, 1))
           .setOrigin(0, 0)
           .setScale(SCALE);
+        // Forzar el body a tener el tamaño del sprite escalado
+        pared.body.setSize(16, 16);
+        pared.body.updateFromGameObject();
+        this.paredes.push(pared);
       } else {
         this.add.image(x, y, 'tiles', getFrameIndex(2, 2))
           .setOrigin(0, 0)
@@ -95,7 +98,55 @@ function create() {
     }
   }
 
-  // 4) Borde decorativo: el nombre de la sala arriba
+  // ---------- Spritesheet del personaje ----------
+  // character_1.png es 112x64 = 7 columnas x 4 filas de frames 16x16.
+  // Frames 0 y 1 = personaje azul, posición "front" (mirando al frente/abajo).
+  // Frames 2 y 3 = mismo personaje con animación de caminata (cambia ligeramente).
+  this.textures.addSpriteSheet('char', this.textures.get('personaje').getSourceImage(), {
+    frameWidth: 16,
+    frameHeight: 16
+  });
+
+  // Posición inicial: centro de la sala
+  const startX = offsetX + 5 * TILE_SIZE * SCALE + TILE_SIZE * SCALE / 2;
+  const startY = offsetY + 4 * TILE_SIZE * SCALE + TILE_SIZE * SCALE / 2;
+
+  this.jugador = this.physics.add.sprite(startX, startY, 'char', 0)
+    .setScale(SCALE)
+    .setCollideWorldBounds(false);   // nosotros controlamos los límites
+
+  // Animación idle (mismo frame 0 estático — no es loop)
+  // Animación walk: alterna frames 0 y 1 a 6 fps
+  this.anims.create({
+    key: 'idle',
+    frames: [{ key: 'char', frame: 0 }],
+    frameRate: 1
+  });
+  this.anims.create({
+    key: 'walk',
+    frames: [
+      { key: 'char', frame: 0 },
+      { key: 'char', frame: 1 }
+    ],
+    frameRate: 6,
+    repeat: -1
+  });
+  this.jugador.play('idle');
+
+  // ---------- Colisiones ----------
+  // Phaser Arcade Physics: el jugador choca con cada pared.
+  this.physics.add.collider(this.jugador, this.paredes);
+
+  // ---------- Input ----------
+  this.cursors = this.input.keyboard.createCursorKeys();
+  this.teclas = this.input.keyboard.addKeys({
+    W: Phaser.Input.Keyboard.KeyCodes.W,
+    A: Phaser.Input.Keyboard.KeyCodes.A,
+    S: Phaser.Input.Keyboard.KeyCodes.S,
+    D: Phaser.Input.Keyboard.KeyCodes.D
+  });
+
+  // ---------- UI: título + hint ----------
   this.add.text(
     this.cameras.main.width / 2,
     30,
@@ -110,11 +161,10 @@ function create() {
     }
   ).setOrigin(0.5);
 
-  // 5) Etiqueta informativa abajo
-  this.add.text(
+  this.hint = this.add.text(
     this.cameras.main.width / 2,
     this.cameras.main.height - 20,
-    'F1 — Tileset + Habitación renderizada (estática)',
+    'F2 — Mover con WASD o flechas',
     {
       fontFamily: 'Trebuchet MS',
       fontSize: '14px',
@@ -123,16 +173,50 @@ function create() {
     }
   ).setOrigin(0.5);
 
-  console.log(`[F1] habitación renderizada: ${MAP_COLS}x${MAP_ROWS} tiles, ${mundoAncho}x${mundoAlto} px`);
+  console.log(`[F2] mundo: ${mundoAncho}x${mundoAlto}, jugador en (${startX}, ${startY})`);
 }
 
-// Convierte coordenadas (row, col) del tileset a índice lineal de frame
-// Asumimos grid 10x10: frame_index = row * 10 + col
+function update(time, delta) {
+  // Resetear velocidad cada frame
+  this.jugador.setVelocity(0);
+
+  let moviendose = false;
+
+  if (this.cursors.left.isDown || this.teclas.A.isDown) {
+    this.jugador.setVelocityX(-SPEED);
+    moviendose = true;
+  } else if (this.cursors.right.isDown || this.teclas.D.isDown) {
+    this.jugador.setVelocityX(SPEED);
+    moviendose = true;
+  }
+
+  if (this.cursors.up.isDown || this.teclas.W.isDown) {
+    this.jugador.setVelocityY(-SPEED);
+    moviendose = true;
+  } else if (this.cursors.down.isDown || this.teclas.S.isDown) {
+    this.jugador.setVelocityY(SPEED);
+    moviendose = true;
+  }
+
+  // Normalizar velocidad en diagonales: si se mueve en X e Y, la magnitud
+  // sería sqrt(2) * SPEED. Para mantener la misma velocidad en todas
+  // las direcciones, ajustamos.
+  if (this.jugador.body.velocity.x !== 0 && this.jugador.body.velocity.y !== 0) {
+    this.jugador.body.velocity.normalize().scale(SPEED);
+  }
+
+  // Cambiar animación según si se está moviendo o no
+  if (moviendose && this.jugador.anims.currentAnim.key !== 'walk') {
+    this.jugador.play('walk', true);
+  } else if (!moviendose && this.jugador.anims.currentAnim.key !== 'idle') {
+    this.jugador.play('idle', true);
+  }
+}
+
 function getFrameIndex(row, col) {
   return row * 10 + col;
 }
 
-// Boot
 window.addEventListener('load', () => {
-  new Phaser.Game(config);
+  window.game = new Phaser.Game(config);
 });
