@@ -1,13 +1,11 @@
 /* ============================================================
-   La Mazmorra del Saber — F4: banco de preguntas + priest interactivo
+   La Mazmorra del Saber — F5: llaves + puerta + multi-sala
    ------------------------------------------------------------
-   - Carga preguntas/matematicas.json
-   - Coloca un priest en una celda fija de la sala
-   - Cuando el jugador se acerca, aparece el prompt "E para hablar"
-   - Al apretar E, abre un panel con la pregunta y 4 opciones
-   - Si acierta: gana 1 llave, feedback verde
-   - Si falla: feedback rojo, no avanza
-   - Tecla Q cierra el panel
+   - Puerta cerrada con collider (tile 3,8 — puerta con handle)
+   - Al tener 3 llaves + apretar E cerca: puerta se abre
+   - Puerta cambia a sprite "abierta" (tile 3,6 — arco sin puerta)
+   - Al cruzar la puerta abierta: transición a Sala 2
+   - Sala 2: nuevo tema, priest con preguntas de español
    ============================================================ */
 
 const config = {
@@ -41,57 +39,104 @@ const MAP_COLS  = 30;
 const MAP_ROWS  = 20;
 const SPEED     = 120;
 const INTERACT_KEY = 'E';
+const LLAVES_PARA_SALIR = 3;
 
-const MAPA = [
-  '##############################',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#...........P.................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '#............................D',
-  '##############################'
-];
+// ---------- Salas ----------
+// Sala 1: Aritmética
+const SALA_1 = {
+  nombre: 'Sala 1: Aritmética',
+  tema: 'matematicas',
+  mapa: [
+    '##############################',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#...........P.................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................D',
+    '##############################'
+  ]
+};
+
+// Sala 2: Español
+const SALA_2 = {
+  nombre: 'Sala 2: Español',
+  tema: 'espanol',
+  mapa: [
+    '##############################',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#...........P.................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '##############################'
+  ]
+};
 
 // Estado del juego
 const game = {
+  salaActual: 1,
   preguntas: [],
+  preguntasSala: [],  // preguntas de la sala actual
   preguntaActual: null,
   llaves: 0,
   totalRespondidas: 0,
   panelAbierto: false,
-  cercaDelPriest: false
+  cercaDelPriest: false,
+  puertaAbierta: false,
+  cercaDePuerta: false,
+  salaCompletada: false
 };
 
 function preload() {
-  console.log('[F4] preload');
+  console.log('[F5] preload start');
   this.load.image('tileset', 'assets/tilesets/tileset.png');
   this.load.image('personaje', 'assets/characters/character_1.png');
   this.load.image('priest', 'assets/priests/priest1/v1/priest1_v1_1.png');
   this.load.image('llave', 'assets/items/keys/keys_1_1.png');
-  this.load.json('preguntas', 'preguntas/matematicas.json');
+  this.load.json('matematicas', 'preguntas/matematicas.json');
+  this.load.json('espanol', 'preguntas/espanol.json');
+  console.log('[F5] preload end');
 }
 
 function create() {
-  console.log('[F4] create');
+  console.log('[F5] create: sala ' + game.salaActual);
+  console.log('[F5] step 1: cargar preguntas');
 
-  // ---------- Cargar preguntas ----------
-  game.preguntas = this.cache.json.get('preguntas').preguntas;
-  console.log(`[F4] cargadas ${game.preguntas.length} preguntas`);
+  // Cargar preguntas de la sala actual
+  const sala = game.salaActual === 1 ? SALA_1 : SALA_2;
+  const banco = this.cache.json.get(sala.tema);
+  game.preguntasSala = banco.preguntas;
+  game.preguntas = game.preguntasSala;
+  console.log('[F5] preguntas cargadas:', game.preguntasSala.length);
 
   // ---------- Mundo ----------
+  console.log('[F5] step 2: cortar tileset');
   this.textures.addSpriteSheet('tiles', this.textures.get('tileset').getSourceImage(), {
     frameWidth: TILE_SIZE,
     frameHeight: TILE_SIZE
@@ -101,10 +146,14 @@ function create() {
   const mundoAlto  = MAP_ROWS * TILE_SIZE * SCALE;
 
   this.paredes = [];
+  this.sueloGroup = [];
+  this.puertaGroup = null;
   let priestX = 0, priestY = 0;
+  let puertaX = 0, puertaY = 0;
+
   for (let row = 0; row < MAP_ROWS; row++) {
     for (let col = 0; col < MAP_COLS; col++) {
-      const cell = MAPA[row][col];
+      const cell = sala.mapa[row][col];
       const x = col * TILE_SIZE * SCALE;
       const y = row * TILE_SIZE * SCALE;
 
@@ -118,24 +167,44 @@ function create() {
         this.add.image(x, y, 'tiles', getFrameIndex(2, 2)).setOrigin(0, 0).setScale(SCALE);
         priestX = x + (TILE_SIZE * SCALE) / 2;
         priestY = y + (TILE_SIZE * SCALE) / 2;
+      } else if (cell === 'D') {
+        this.add.image(x, y, 'tiles', getFrameIndex(2, 2)).setOrigin(0, 0).setScale(SCALE);
+        puertaX = x;
+        puertaY = y;
       } else {
         this.add.image(x, y, 'tiles', getFrameIndex(2, 2)).setOrigin(0, 0).setScale(SCALE);
       }
     }
   }
 
+  // ---------- Puerta (sprite con collider) ----------
+  // Tile 3,8 = puerta cerrada con handle
+  // Tile 3,6 = puerta abierta (arco vacío)
+  this.puertaSprite = this.physics.add.staticImage(puertaX, puertaY, 'tiles', getFrameIndex(3, 8))
+    .setOrigin(0, 0).setScale(SCALE);
+  this.puertaSprite.body.setSize(16, 16);
+  this.puertaSprite.body.updateFromGameObject();
+  this.puertaSprite.puedeAbrir = true;  // cuando está cerrada
+
   // ---------- Personaje ----------
   this.textures.addSpriteSheet('char', this.textures.get('personaje').getSourceImage(), {
     frameWidth: 16, frameHeight: 16
   });
 
-  // Posición inicial: 4 tiles a la izquierda del priest
-  const startX = (priestX / (TILE_SIZE * SCALE) - 4) * TILE_SIZE * SCALE;
-  const startY = priestY;
+  // Posición inicial: cerca del priest (si no hay priest, al centro)
+  let startX, startY;
+  if (priestX > 0) {
+    startX = (priestX / (TILE_SIZE * SCALE) - 4) * TILE_SIZE * SCALE;
+    startY = priestY;
+  } else {
+    console.warn('[F5] no se encontró priest en el mapa, arrancando al centro');
+    startX = (MAP_COLS / 2) * TILE_SIZE * SCALE;
+    startY = (MAP_ROWS / 2) * TILE_SIZE * SCALE;
+  }
 
-  this.jugador = this.physics.add.sprite(startX, startY, 'char', 0)
-    .setScale(SCALE);
-  this.jugador.body.setSize(12, 12);  // hitbox un poco menor que el sprite
+  this.jugador = this.physics.add.sprite(startX, startY, 'char', 0).setScale(SCALE);
+  console.log('[F5] step 4: jugador creado en', startX, startY);
+  this.jugador.body.setSize(12, 12);
 
   this.anims.create({
     key: 'idle',
@@ -149,26 +218,39 @@ function create() {
   });
   this.jugador.play('idle');
 
+  // Collider: jugador contra paredes
   this.physics.add.collider(this.jugador, this.paredes);
+  // Collider: jugador contra puerta (también bloquea)
+  this.physics.add.collider(this.jugador, this.puertaSprite);
 
-  // ---------- Priest NPC ----------
-  this.priest = this.add.sprite(priestX, priestY, 'priest').setScale(SCALE);
+  // ---------- Priest ----------
+  if (priestX > 0) {
+    this.priest = this.add.sprite(priestX, priestY, 'priest').setScale(SCALE);
 
-  // Trigger zone: cuando el jugador entra, mostramos el prompt
-  // (es un rectángulo invisible alrededor del priest)
-  // 4 tiles = 192px (más generoso vertical y horizontalmente)
-  const triggerSize = TILE_SIZE * SCALE * 4;
-  this.priestTrigger = this.add.zone(priestX, priestY, triggerSize, triggerSize);
-  this.physics.add.existing(this.priestTrigger);
-  this.priestTrigger.body.setSize(triggerSize, triggerSize);
+    // ---------- Trigger zones ----------
+    const triggerPriest = TILE_SIZE * SCALE * 4;
+    this.priestTrigger = this.add.zone(priestX, priestY, triggerPriest, triggerPriest);
+    this.physics.add.existing(this.priestTrigger);
+    this.priestTrigger.body.setSize(triggerPriest, triggerPriest);
+    this.physics.add.overlap(this.jugador, this.priestTrigger, () => {
+      game.cercaDelPriest = true;
+    }, null, this);
+    this.cercaDistanciaPriest = 80;
+  } else {
+    this.priest = null;
+    this.priestTrigger = null;
+    this.cercaDistanciaPriest = 0;
+  }
 
-  // --- Detección de proximidad ---
-  this.physics.add.overlap(this.jugador, this.priestTrigger, () => {
-    game.cercaDelPriest = true;
+  // Puerta: 3 tiles (más generoso)
+  const triggerPuerta = TILE_SIZE * SCALE * 3;
+  this.puertaTrigger = this.add.zone(puertaX + (TILE_SIZE * SCALE) / 2, puertaY + (TILE_SIZE * SCALE) / 2, triggerPuerta, triggerPuerta);
+  this.physics.add.existing(this.puertaTrigger);
+  this.puertaTrigger.body.setSize(triggerPuerta, triggerPuerta);
+  this.physics.add.overlap(this.jugador, this.puertaTrigger, () => {
+    game.cercaDePuerta = true;
   }, null, this);
-  // Además, chequeo manual por distancia como backup (el callback de overlap
-  // puede fallar por timing de física si el body se mueve rápido)
-  this.cercaDistancia = 80; // px
+  this.cercaDistanciaPuerta = 80;
 
   // ---------- Cámara ----------
   this.cameras.main.setBounds(0, 0, mundoAncho, mundoAlto);
@@ -187,60 +269,62 @@ function create() {
     Q: Phaser.Input.Keyboard.KeyCodes.Q
   });
 
-  // ---------- HUD: prompt + llave + progreso ----------
-  this.promptText = this.add.text(0, 0, '', {
+  // ---------- HUD ----------
+  this.hudLlaves = this.add.text(10, 10, `🔑 ${game.llaves}/${LLAVES_PARA_SALIR}`, {
     fontFamily: 'Trebuchet MS',
-    fontSize: '18px',
-    color: '#ffd966',
-    backgroundColor: '#000000',
-    padding: { x: 10, y: 6 },
-    stroke: '#000000', strokeThickness: 2
-  }).setScrollFactor(0).setVisible(false);
-
-  this.hudLlaves = this.add.text(10, 10, '🔑 0', {
-    fontFamily: 'Trebuchet MS',
-    fontSize: '20px',
-    color: '#ffd966',
+    fontSize: '20px', color: '#ffd966',
     backgroundColor: '#000000',
     padding: { x: 10, y: 6 }
   }).setScrollFactor(0);
 
-  this.hudProgreso = this.add.text(10, 50, 'Pregunta 0/0', {
+  this.hudProgreso = this.add.text(10, 50, `Aciertos: 0 | Total: 0`, {
     fontFamily: 'Trebuchet MS',
-    fontSize: '14px',
-    color: '#aaaaaa',
+    fontSize: '14px', color: '#aaaaaa',
     backgroundColor: '#000000',
     padding: { x: 10, y: 4 }
   }).setScrollFactor(0);
 
-  this.hudTitulo = this.add.text(this.cameras.main.width / 2, 30, 'Sala 1: Aritmética', {
+  this.hudSala = this.add.text(this.cameras.main.width / 2, 30, sala.nombre, {
     fontFamily: 'Trebuchet MS',
-    fontSize: '24px',
-    color: '#ffd966',
-    align: 'center',
+    fontSize: '24px', color: '#ffd966', align: 'center',
     stroke: '#000000', strokeThickness: 3
   }).setOrigin(0.5).setScrollFactor(0);
 
-  // ---------- Panel de diálogo (oculto al inicio) ----------
+  this.promptPriest = this.add.text(0, 0, '', {
+    fontFamily: 'Trebuchet MS',
+    fontSize: '16px', color: '#ffd966',
+    backgroundColor: '#000000',
+    padding: { x: 10, y: 6 }
+  }).setScrollFactor(0).setVisible(false);
+
+  this.promptPuerta = this.add.text(0, 0, '', {
+    fontFamily: 'Trebuchet MS',
+    fontSize: '16px', color: '#90ee90',
+    backgroundColor: '#000000',
+    padding: { x: 10, y: 6 }
+  }).setScrollFactor(0).setVisible(false);
+
+  // Banner de sala completada
+  this.banner = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, '', {
+    fontFamily: 'Trebuchet MS',
+    fontSize: '48px', color: '#ffd966', align: 'center',
+    stroke: '#000000', strokeThickness: 5
+  }).setOrigin(0.5).setScrollFactor(0).setVisible(false);
+
+  // ---------- Panel de diálogo ----------
   this.panel = crearPanelDialogo(this);
   this.panel.setVisible(false);
 }
 
 function crearPanelDialogo(scene) {
-  // Container centrado en la pantalla (fijo a la cámara con setScrollFactor 0)
   const cx = scene.cameras.main.width / 2;
   const cy = scene.cameras.main.height / 2;
-  const W  = 700;
-  const H  = 420;
-
+  const W = 700, H = 420;
   const c = scene.add.container(cx, cy).setScrollFactor(0).setDepth(100);
 
-  // Fondo
-  const bg = scene.add.rectangle(0, 0, W, H, 0x1a1a2e, 0.97)
-    .setStrokeStyle(3, 0xffd966);
+  const bg = scene.add.rectangle(0, 0, W, H, 0x1a1a2e, 0.97).setStrokeStyle(3, 0xffd966);
   c.add(bg);
 
-  // Título del panel
   const titulo = scene.add.text(0, -H/2 + 30, 'PREGUNTA', {
     fontFamily: 'Trebuchet MS',
     fontSize: '20px', color: '#ffd966', align: 'center',
@@ -248,7 +332,6 @@ function crearPanelDialogo(scene) {
   }).setOrigin(0.5);
   c.add(titulo);
 
-  // Texto de la pregunta (lo llenamos al abrir)
   const pregunta = scene.add.text(0, -H/2 + 80, '', {
     fontFamily: 'Trebuchet MS',
     fontSize: '22px', color: '#ffffff', align: 'center',
@@ -256,14 +339,10 @@ function crearPanelDialogo(scene) {
   }).setOrigin(0.5);
   c.add(pregunta);
 
-  // 4 botones de opción
   const opciones = [];
-  const OY = 30;
-  const OH = 50;
-  const OW = W - 80;
   for (let i = 0; i < 4; i++) {
-    const oy = OY + i * (OH + 10);
-    const rect = scene.add.rectangle(0, oy, OW, OH, 0x3a3a4e, 1)
+    const oy = 30 + i * 60;
+    const rect = scene.add.rectangle(0, oy, W - 80, 50, 0x3a3a4e, 1)
       .setStrokeStyle(2, 0xffd966)
       .setInteractive({ useHandCursor: true });
     const txt = scene.add.text(0, oy, '', {
@@ -273,18 +352,15 @@ function crearPanelDialogo(scene) {
     rect.on('pointerover', () => rect.setFillStyle(0x4a4a6e, 1));
     rect.on('pointerout',  () => rect.setFillStyle(0x3a3a4e, 1));
     rect.on('pointerdown', () => {
-      if (game.panelAbierto) {
-        responderPregunta(scene, i);
-      }
+      if (game.panelAbierto) responderPregunta(scene, i);
     });
     c.add([rect, txt]);
     opciones.push({ rect, txt, idx: i });
   }
 
-  // Footer
   const footer = scene.add.text(0, H/2 - 25, 'Q para cerrar', {
     fontFamily: 'Trebuchet MS',
-    fontSize: '12px', color: '#888888', align: 'center'
+    fontSize: '12px', color: '#888888'
   }).setOrigin(0.5);
   c.add(footer);
 
@@ -294,19 +370,17 @@ function crearPanelDialogo(scene) {
 }
 
 function abrirPanel(scene) {
-  if (game.preguntas.length === 0) return;
-  // Elegir pregunta aleatoria
-  const idx = Math.floor(Math.random() * game.preguntas.length);
-  game.preguntaActual = game.preguntas[idx];
+  if (game.preguntasSala.length === 0) return;
+  const idx = Math.floor(Math.random() * game.preguntasSala.length);
+  game.preguntaActual = game.preguntasSala[idx];
 
-  // Llenar textos
   const pregunta = scene.panel.getData('pregunta');
   pregunta.setText(game.preguntaActual.pregunta);
 
   const opciones = scene.panel.getData('opciones');
   game.preguntaActual.opciones.forEach((opcion, i) => {
     opciones[i].txt.setText(`${String.fromCharCode(65 + i)}) ${opcion}`);
-    opciones[i].rect.setFillStyle(0x3a3a4e, 1);  // reset color
+    opciones[i].rect.setFillStyle(0x3a3a4e, 1);
   });
 
   scene.panel.setVisible(true);
@@ -324,28 +398,67 @@ function responderPregunta(scene, idxElegido) {
   const opciones = scene.panel.getData('opciones');
 
   if (idxElegido === correcta) {
-    opciones[idxElegido].rect.setFillStyle(0x28a745, 1);  // verde
+    opciones[idxElegido].rect.setFillStyle(0x28a745, 1);
     game.llaves += 1;
     game.totalRespondidas += 1;
-    scene.hudLlaves.setText(`🔑 ${game.llaves}`);
+    scene.hudLlaves.setText(`🔑 ${game.llaves}/${LLAVES_PARA_SALIR}`);
     scene.hudProgreso.setText(`Aciertos: ${game.llaves} | Total: ${game.totalRespondidas}`);
   } else {
-    opciones[idxElegido].rect.setFillStyle(0xdc3545, 1);   // rojo
-    opciones[correcta].rect.setFillStyle(0x28a745, 1);      // verde: marcar la correcta
+    opciones[idxElegido].rect.setFillStyle(0xdc3545, 1);
+    opciones[correcta].rect.setFillStyle(0x28a745, 1);
     game.totalRespondidas += 1;
     scene.hudProgreso.setText(`Aciertos: ${game.llaves} | Total: ${game.totalRespondidas}`);
   }
 
-  // Cerrar panel después de 1.5 segundos
   scene.time.delayedCall(1500, () => cerrarPanel(scene));
 }
 
+function intentarAbrirPuerta(scene) {
+  if (game.puertaAbierta) return;
+  if (game.llaves >= LLAVES_PARA_SALIR) {
+    // Cambiar sprite a puerta abierta
+    scene.puertaSprite.setFrame(getFrameIndex(3, 6));
+    scene.puertaSprite.body.enable = false;  // desactiva collider
+    game.puertaAbierta = true;
+    game.salaCompletada = true;
+
+    // Banner
+    scene.banner.setText('¡SALA COMPLETADA!\nPasando a la siguiente...');
+    scene.banner.setVisible(true);
+    scene.time.delayedCall(2500, () => {
+      scene.banner.setVisible(false);
+      cargarSala(scene, game.salaActual + 1);
+    });
+  } else {
+    // Mensaje "necesitas más llaves"
+    const faltan = LLAVES_PARA_SALIR - game.llaves;
+    scene.banner.setText(`Necesitas ${faltan} llave${faltan > 1 ? 's' : ''} más`);
+    scene.banner.setStyle({ fontSize: '32px', color: '#dc3545' });
+    scene.banner.setVisible(true);
+    scene.time.delayedCall(1500, () => scene.banner.setVisible(false));
+  }
+}
+
+function cargarSala(scene, numSala) {
+  if (numSala > 2) {
+    scene.banner.setText('¡MAZMORRA COMPLETA!');
+    scene.banner.setStyle({ fontSize: '64px', color: '#ffd966' });
+    scene.banner.setVisible(true);
+    return;
+  }
+  // Reset estado
+  game.salaActual = numSala;
+  game.llaves = 0;
+  game.puertaAbierta = false;
+  game.salaCompletada = false;
+  // Restart scene
+  scene.scene.restart();
+}
+
 function update(time, delta) {
-  // Resetear velocidad
   this.jugador.setVelocity(0);
   let moviendose = false;
 
-  // Si el panel está abierto, no nos movemos
   if (!game.panelAbierto) {
     if (this.cursors.left.isDown || this.teclas.A.isDown) {
       this.jugador.setVelocityX(-SPEED); moviendose = true;
@@ -368,28 +481,45 @@ function update(time, delta) {
     this.jugador.play('idle', true);
   }
 
-  // --- Detección de proximidad con priest ---
-  // Combinamos el callback de overlap (más preciso con zonas) con un check
-  // por distancia (más robusto contra timing de física).
-  const distAlPriest = Math.hypot(this.jugador.x - this.priest.x, this.jugador.y - this.priest.y);
-  if (game.cercaDelPriest || distAlPriest < this.cercaDistancia) {
-    this.promptText.setText(`Apreta ${INTERACT_KEY} para hablar con el sacerdote`);
-    this.promptText.setPosition(
-      this.cameras.main.width / 2 - this.promptText.width / 2,
+  // --- Prompt priest ---
+  if (this.priest && (game.cercaDelPriest || Math.hypot(this.jugador.x - this.priest.x, this.jugador.y - this.priest.y) < this.cercaDistanciaPriest) && !game.panelAbierto) {
+    this.promptPriest.setText(`Apreta ${INTERACT_KEY} para hablar con el sacerdote`);
+    this.promptPriest.setPosition(
+      this.cameras.main.width / 2 - this.promptPriest.width / 2,
       this.cameras.main.height - 80
     );
-    this.promptText.setVisible(true);
+    this.promptPriest.setVisible(true);
   } else {
-    this.promptText.setVisible(false);
+    this.promptPriest.setVisible(false);
   }
-
-  // Reset del flag de proximidad (lo re-activa el overlap cada frame)
   game.cercaDelPriest = false;
 
-  // --- Tecla E: abrir panel ---
+  // --- Prompt puerta ---
+  if (game.puertaAbierta) {
+    this.promptPuerta.setVisible(false);
+  } else {
+    const puertaCx = this.puertaSprite.x + (TILE_SIZE * SCALE) / 2;
+    const puertaCy = this.puertaSprite.y + (TILE_SIZE * SCALE) / 2;
+    const distPuerta = Math.hypot(this.jugador.x - puertaCx, this.jugador.y - puertaCy);
+    if (game.cercaDePuerta || distPuerta < this.cercaDistanciaPuerta) {
+      this.promptPuerta.setText(`Apreta ${INTERACT_KEY} para abrir la puerta`);
+      this.promptPuerta.setPosition(
+        this.cameras.main.width / 2 - this.promptPuerta.width / 2,
+        this.cameras.main.height - 110
+      );
+      this.promptPuerta.setVisible(true);
+    } else {
+      this.promptPuerta.setVisible(false);
+    }
+  }
+  game.cercaDePuerta = false;
+
+  // --- Tecla E: contexto-aware ---
   if (Phaser.Input.Keyboard.JustDown(this.teclas.E) && !game.panelAbierto) {
-    if (this.promptText.visible) {
+    if (this.promptPriest.visible) {
       abrirPanel(this);
+    } else if (this.promptPuerta.visible && !game.puertaAbierta) {
+      intentarAbrirPuerta(this);
     }
   }
 
@@ -405,4 +535,8 @@ function getFrameIndex(row, col) {
 
 window.addEventListener('load', () => {
   window.game = new Phaser.Game(config);
+  // Exponer el estado para debug/tests
+  window.game.events.once('ready', () => {
+    window._g_state = game;
+  });
 });

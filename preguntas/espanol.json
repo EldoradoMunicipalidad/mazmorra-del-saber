@@ -1,5 +1,76 @@
 {
   "tema": "Español",
-  "descripcion": "Ortografía, gramática y vocabulario. Pendiente de completar.",
-  "preguntas": []
+  "descripcion": "Ortografia y gramatica basica. Para 4-6 grado.",
+  "preguntas": [
+    {
+      "id": "esp-001",
+      "pregunta": "¿Cual es el plural correcto de \"lapiz\"?",
+      "opciones": ["lapizes", "lapices", "lapises", "lapiz"],
+      "respuesta": 1,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-002",
+      "pregunta": "¿Que palabra esta bien escrita?",
+      "opciones": ["haver", "haber", "a ver", "haver"],
+      "respuesta": 1,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-003",
+      "pregunta": "El articulo correcto para \"agua\" es:",
+      "opciones": ["el agua", "la agua", "el agua (no aplica)", "ninguno"],
+      "respuesta": 0,
+      "dificultad": "media"
+    },
+    {
+      "id": "esp-004",
+      "pregunta": "¿Cual de estos es un sustantivo?",
+      "opciones": ["correr", "rapido", "perro", "bonito"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-005",
+      "pregunta": "¿Que signo va al final de una oracion interrogativa?",
+      "opciones": ["punto", "coma", "signo de interrogacion", "punto y coma"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-006",
+      "pregunta": "¿Cual es el sinonimo de \"alegre\"?",
+      "opciones": ["triste", "contento", "enojado", "cansado"],
+      "respuesta": 1,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-007",
+      "pregunta": "¿Cuantas silabas tiene la palabra \"mariposa\"?",
+      "opciones": ["2", "3", "4", "5"],
+      "respuesta": 2,
+      "dificultad": "media"
+    },
+    {
+      "id": "esp-008",
+      "pregunta": "El verbo \"estudiar\" en primera persona del singular del presente es:",
+      "opciones": ["estudias", "estudio", "estudiamos", "estudian"],
+      "respuesta": 1,
+      "dificultad": "media"
+    },
+    {
+      "id": "esp-009",
+      "pregunta": "¿Cual de estos es un adjetivo?",
+      "opciones": ["mesa", "casa", "grande", "correr"],
+      "respuesta": 2,
+      "dificultad": "facil"
+    },
+    {
+      "id": "esp-010",
+      "pregunta": "¿Que palabra es aguda (la silaba tonica es la ultima)?",
+      "opciones": ["camion", "arbol", "lapiz", "casa"],
+      "respuesta": 2,
+      "dificultad": "dificil"
+    }
+  ]
 }

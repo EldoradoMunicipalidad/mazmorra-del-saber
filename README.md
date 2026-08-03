@@ -17,7 +17,7 @@ Juego educativo de dungeon-crawler 2D donde el personaje debe resolver preguntas
 | F2 | ✅ | Personaje + movimiento fluido WASD/flechas + colisiones con paredes |
 | F3 | ✅ | Mapa 30x20 + cámara que sigue al jugador con suavizado |
 | F4 | ✅ | Banco de preguntas JSON + priest interactivo + panel de diálogo |
-| F5 | ⏳ | Sistema de llaves + puertas + múltiples salas |
+| F5 | ✅ | Sistema de 3 llaves + puerta con collider + transición Sala 1→Sala 2 |
 | F6 | ⏳ | UI/HUD + enemigos + deploy |
 
 ## Estructura
